@@ -1,1 +1,3 @@
-void Timer2_ClockTick_Init(void);
+#include <stdint.h>
+void Timer2_ClockTick_Init(int32_t period);
+void Timer0_ButtonCheck_Init(int32_t period);
