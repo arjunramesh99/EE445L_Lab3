@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "ST7735.h"
+#include "GPIO.h"
 #include "PLL.h"
 #include "../inc/tm4c123gh6pm.h"
 #include "ClockBmp.h"
@@ -53,68 +54,42 @@ ClockHand minute_hand, hour_hand;
 void PortF_Init(void);
 void displayNumTime(int hour_index, int minute_index, int msg_flag);
 void displayHands(int hour_index, int minute_index);
-// PF4 is input
-// Make PF2 an output, enable digital I/O, ensure alt. functions off
-void PortF_Init(void){ 
-  SYSCTL_RCGCGPIO_R |= 0x20;        // 1) activate clock for Port F
-  while((SYSCTL_PRGPIO_R&0x20)==0){}; // allow time for clock to start
-                                    // 2) no need to unlock PF2, PF4
-  GPIO_PORTF_PCTL_R &= ~0x000F0F00; // 3) regular GPIO
-  GPIO_PORTF_AMSEL_R &= ~0x14;      // 4) disable analog function on PF2, PF4
-  GPIO_PORTF_PUR_R |= 0x10;         // 5) pullup for PF4
-  GPIO_PORTF_DIR_R |= 0x04;         // 5) set PF2 direction to output
-	GPIO_PORTF_DIR_R &= ~(0x10);			// PF4 input
-  GPIO_PORTF_AFSEL_R &= ~0x14;      // 6) regular port function
-  GPIO_PORTF_DEN_R |= 0x14;         // 7) enable digital port
-}
-
-void PortB_Init(void){ 
-  SYSCTL_RCGCGPIO_R |= 0x02;        // 1) activate clock for Port B
-  while((SYSCTL_PRGPIO_R&0x02)==0){}; // allow time for clock to start
-                                    // 2) no need to unlock PF2, PF4
-  GPIO_PORTB_PCTL_R &= ~0x000F00FF; // 3) regular GPIO
-  GPIO_PORTB_AMSEL_R &= ~0x13;      // 4) disable analog function on PF2, PF4
-  GPIO_PORTB_PUR_R |= 0x13;         // 5) pullup for PF4
-  GPIO_PORTB_DIR_R &= ~(0x13);         // 5) set direction to output
-  GPIO_PORTB_AFSEL_R &= ~0x13;      // 6) regular port function
-  GPIO_PORTB_DEN_R |= 0x13;         // 7) enable digital port
-}
 
 
 int isDisplayed = 0;
 int BM_X = 7;
-int BM_Y = 150;//138;
+int BM_Y = 140;//150;
 int CENTER_X = 64;
-int CENTER_Y = 92;//80;
+int CENTER_Y = 82;//92;
 int secondCount = 0;
-int prevPF4 = 1, prevPF0 = 1, prevPB0 = 1, prevPB1 = 1, prevPB4 = 1;
+int prevPF4 = 1, prevPF0 = 1, prevPB0 = 1, prevPB1 = 1, prevPB4 = 1, modeSwitch = 1;
 
 const short cosine[720] = {-1000, -1000, -1000, -1000, -999, -999, -999, -998, -998, -997, -996, -995, -995, -994, -993, -991, -990, -989, -988, -986, -985, -983, -982, -980, -978, -976, -974, -972, -970, -968, -966, -964, -961, -959, -956, -954, -951, -948, -946, -943, -940, -937, -934, -930, -927, -924, -921, -917, -914, -910, -906, -903, -899, -895, -891, -887, -883, -879, -875, -870, -866, -862, -857, -853, -848, -843, -839, -834, -829, -824, -819, -814, -809, -804, -799, -793, -788, -783, -777, -772, -766, -760, -755, -749, -743, -737, -731, -725, -719, -713, -707, -701, -695, -688, -682, -676, -669, -663, -656, -649, -643, -636, -629, -623, -616, -609, -602, -595, -588, -581, -574, -566, -559, -552, -545, -537, -530, -522, -515, -508, -500, -492, -485, -477, -469, -462, -454, -446, -438, -431, -423, -415, -407, -399, -391, -383, -375, -367, -358, -350, -342, -334, -326, -317, -309, -301, -292, -284, -276, -267, -259, -250, -242, -233, -225, -216, -208, -199, -191, -182, -174, -165, -156, -148, -139, -131, -122, -113, -105, -96, -87, -78, -70, -61, -52, -44, -35, -26, -17, -9, 0, 9, 17, 26, 35, 44, 52, 61, 70, 78, 87, 96, 105, 113, 122, 131, 139, 148, 156, 165, 174, 182, 191, 199, 208, 216, 225, 233, 242, 250, 259, 267, 276, 284, 292, 301, 309, 317, 326, 334, 342, 350, 358, 367, 375, 383, 391, 399, 407, 415, 423, 431, 438, 446, 454, 462, 469, 477, 485, 492, 500, 508, 515, 522, 530, 537, 545, 552, 559, 566, 574, 581, 588, 595, 602, 609, 616, 623, 629, 636, 643, 649, 656, 663, 669, 676, 682, 688, 695, 701, 707, 713, 719, 725, 731, 737, 743, 749, 755, 760, 766, 772, 777, 783, 788, 793, 799, 804, 809, 814, 819, 824, 829, 834, 839, 843, 848, 853, 857, 862, 866, 870, 875, 879, 883, 887, 891, 895, 899, 903, 906, 910, 914, 917, 921, 924, 927, 930, 934, 937, 940, 943, 946, 948, 951, 954, 956, 959, 961, 964, 966, 968, 970, 972, 974, 976, 978, 980, 982, 983, 985, 986, 988, 989, 990, 991, 993, 994, 995, 995, 996, 997, 998, 998, 999, 999, 999, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 999, 999, 999, 998, 998, 997, 996, 995, 995, 994, 993, 991, 990, 989, 988, 986, 985, 983, 982, 980, 978, 976, 974, 972, 970, 968, 966, 964, 961, 959, 956, 954, 951, 948, 946, 943, 940, 937, 934, 930, 927, 924, 921, 917, 914, 910, 906, 903, 899, 895, 891, 887, 883, 879, 875, 870, 866, 862, 857, 853, 848, 843, 839, 834, 829, 824, 819, 814, 809, 804, 799, 793, 788, 783, 777, 772, 766, 760, 755, 749, 743, 737, 731, 725, 719, 713, 707, 701, 695, 688, 682, 676, 669, 663, 656, 649, 643, 636, 629, 623, 616, 609, 602, 595, 588, 581, 574, 566, 559, 552, 545, 537, 530, 522, 515, 508, 500, 492, 485, 477, 469, 462, 454, 446, 438, 431, 423, 415, 407, 399, 391, 383, 375, 367, 358, 350, 342, 334, 326, 317, 309, 301, 292, 284, 276, 267, 259, 250, 242, 233, 225, 216, 208, 199, 191, 182, 174, 165, 156, 148, 139, 131, 122, 113, 105, 96, 87, 78, 70, 61, 52, 44, 35, 26, 17, 9, 0, -9, -17, -26, -35, -44, -52, -61, -70, -78, -87, -96, -105, -113, -122, -131, -139, -148, -156, -165, -174, -182, -191, -199, -208, -216, -225, -233, -242, -250, -259, -267, -276, -284, -292, -301, -309, -317, -326, -334, -342, -350, -358, -367, -375, -383, -391, -399, -407, -415, -423, -431, -438, -446, -454, -462, -469, -477, -485, -492, -500, -508, -515, -522, -530, -537, -545, -552, -559, -566, -574, -581, -588, -595, -602, -609, -616, -623, -629, -636, -643, -649, -656, -663, -669, -676, -682, -688, -695, -701, -707, -713, -719, -725, -731, -737, -743, -749, -755, -760, -766, -772, -777, -783, -788, -793, -799, -804, -809, -814, -819, -824, -829, -834, -839, -843, -848, -853, -857, -862, -866, -870, -875, -879, -883, -887, -891, -895, -899, -903, -906, -910, -914, -917, -921, -924, -927, -930, -934, -937, -940, -943, -946, -948, -951, -954, -956, -959, -961, -964, -966, -968, -970, -972, -974, -976, -978, -980, -982, -983, -985, -986, -988, -989, -990, -991, -993, -994, -995, -995, -996, -997, -998, -998, -999, -999, -999, -1000, -1000, -1000};
 const short sine[720] = {0, 9, 17, 26, 35, 44, 52, 61, 70, 78, 87, 96, 105, 113, 122, 131, 139, 148, 156, 165, 174, 182, 191, 199, 208, 216, 225, 233, 242, 250, 259, 267, 276, 284, 292, 301, 309, 317, 326, 334, 342, 350, 358, 367, 375, 383, 391, 399, 407, 415, 423, 431, 438, 446, 454, 462, 469, 477, 485, 492, 500, 508, 515, 522, 530, 537, 545, 552, 559, 566, 574, 581, 588, 595, 602, 609, 616, 623, 629, 636, 643, 649, 656, 663, 669, 676, 682, 688, 695, 701, 707, 713, 719, 725, 731, 737, 743, 749, 755, 760, 766, 772, 777, 783, 788, 793, 799, 804, 809, 814, 819, 824, 829, 834, 839, 843, 848, 853, 857, 862, 866, 870, 875, 879, 883, 887, 891, 895, 899, 903, 906, 910, 914, 917, 921, 924, 927, 930, 934, 937, 940, 943, 946, 948, 951, 954, 956, 959, 961, 964, 966, 968, 970, 972, 974, 976, 978, 980, 982, 983, 985, 986, 988, 989, 990, 991, 993, 994, 995, 995, 996, 997, 998, 998, 999, 999, 999, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 999, 999, 999, 998, 998, 997, 996, 995, 995, 994, 993, 991, 990, 989, 988, 986, 985, 983, 982, 980, 978, 976, 974, 972, 970, 968, 966, 964, 961, 959, 956, 954, 951, 948, 946, 943, 940, 937, 934, 930, 927, 924, 921, 917, 914, 910, 906, 903, 899, 895, 891, 887, 883, 879, 875, 870, 866, 862, 857, 853, 848, 843, 839, 834, 829, 824, 819, 814, 809, 804, 799, 793, 788, 783, 777, 772, 766, 760, 755, 749, 743, 737, 731, 725, 719, 713, 707, 701, 695, 688, 682, 676, 669, 663, 656, 649, 643, 636, 629, 623, 616, 609, 602, 595, 588, 581, 574, 566, 559, 552, 545, 537, 530, 522, 515, 508, 500, 492, 485, 477, 469, 462, 454, 446, 438, 431, 423, 415, 407, 399, 391, 383, 375, 367, 358, 350, 342, 334, 326, 317, 309, 301, 292, 284, 276, 267, 259, 250, 242, 233, 225, 216, 208, 199, 191, 182, 174, 165, 156, 148, 139, 131, 122, 113, 105, 96, 87, 78, 70, 61, 52, 44, 35, 26, 17, 9, 0, -9, -17, -26, -35, -44, -52, -61, -70, -78, -87, -96, -105, -113, -122, -131, -139, -148, -156, -165, -174, -182, -191, -199, -208, -216, -225, -233, -242, -250, -259, -267, -276, -284, -292, -301, -309, -317, -326, -334, -342, -350, -358, -367, -375, -383, -391, -399, -407, -415, -423, -431, -438, -446, -454, -462, -469, -477, -485, -492, -500, -508, -515, -522, -530, -537, -545, -552, -559, -566, -574, -581, -588, -595, -602, -609, -616, -623, -629, -636, -643, -649, -656, -663, -669, -676, -682, -688, -695, -701, -707, -713, -719, -725, -731, -737, -743, -749, -755, -760, -766, -772, -777, -783, -788, -793, -799, -804, -809, -814, -819, -824, -829, -834, -839, -843, -848, -853, -857, -862, -866, -870, -875, -879, -883, -887, -891, -895, -899, -903, -906, -910, -914, -917, -921, -924, -927, -930, -934, -937, -940, -943, -946, -948, -951, -954, -956, -959, -961, -964, -966, -968, -970, -972, -974, -976, -978, -980, -982, -983, -985, -986, -988, -989, -990, -991, -993, -994, -995, -995, -996, -997, -998, -998, -999, -999, -999, -1000, -1000, -1000, -1000, -1000, -1000, -1000, -999, -999, -999, -998, -998, -997, -996, -995, -995, -994, -993, -991, -990, -989, -988, -986, -985, -983, -982, -980, -978, -976, -974, -972, -970, -968, -966, -964, -961, -959, -956, -954, -951, -948, -946, -943, -940, -937, -934, -930, -927, -924, -921, -917, -914, -910, -906, -903, -899, -895, -891, -887, -883, -879, -875, -870, -866, -862, -857, -853, -848, -843, -839, -834, -829, -824, -819, -814, -809, -804, -799, -793, -788, -783, -777, -772, -766, -760, -755, -749, -743, -737, -731, -725, -719, -713, -707, -701, -695, -688, -682, -676, -669, -663, -656, -649, -643, -636, -629, -623, -616, -609, -602, -595, -588, -581, -574, -566, -559, -552, -545, -537, -530, -522, -515, -508, -500, -492, -485, -477, -469, -462, -454, -446, -438, -431, -423, -415, -407, -399, -391, -383, -375, -367, -358, -350, -342, -334, -326, -317, -309, -301, -292, -284, -276, -267, -259, -250, -242, -233, -225, -216, -208, -199, -191, -182, -174, -165, -156, -148, -139, -131, -122, -113, -105, -96, -87, -78, -70, -61, -52, -44, -35, -26, -17, -9};		
 int clockMode = 0;
+int setTimeState = -1;
+
+void displayClock(int hr_index, int min_index, int disp_msg_ind) {
+		ST7735_FillRect(0, 0, 128, 32, ST7735_WHITE);
+		displayNumTime(hr_index, min_index, disp_msg_ind);
+		ST7735_DrawString(1, 15, "Alarm Not Set", ST7735_MAGENTA);
+		ST7735_DrawBitmap(BM_X, BM_Y, ClockImg, 118, 118);
+		displayHands(hr_index, min_index);
+		isDisplayed = 1;
+}
 
 void setCurrentTimeDisplay() {
-		ST7735_FillRect(0, 0, 128, 32, ST7735_WHITE);
-		displayNumTime(hour_hand.set_time_angle_index, minute_hand.set_time_angle_index, 1);
-		ST7735_DrawBitmap(BM_X, BM_Y, ClockImg, 118, 118);
-		displayHands(hour_hand.set_time_angle_index, minute_hand.set_time_angle_index);
-		isDisplayed = 1;
+		int disp_msg_ind = setTimeState + 1;
+		displayClock(hour_hand.set_time_angle_index, minute_hand.set_time_angle_index, disp_msg_ind);
 }
 
 void setAlarmDisplay() {
-		ST7735_FillRect(0, 0, 128, 32, ST7735_WHITE);
-		displayNumTime(hour_hand.angle_index, minute_hand.angle_index, 2);
-		ST7735_DrawBitmap(BM_X, BM_Y, ClockImg, 118, 118);
-		displayHands(hour_hand.angle_index, minute_hand.angle_index);
-		isDisplayed = 1;
+		int disp_msg_ind = setTimeState + 3;
+		displayClock(hour_hand.set_alarm_angle_index, minute_hand.set_alarm_angle_index, disp_msg_ind);
 }
 
 void ambientDisplay() {
-		ST7735_FillRect(0, 0, 128, 32, ST7735_WHITE);
-		displayNumTime(hour_hand.angle_index, minute_hand.angle_index, 0);
-		ST7735_DrawBitmap(BM_X, BM_Y, ClockImg, 118, 118);
-		displayHands(hour_hand.angle_index, minute_hand.angle_index);
-		isDisplayed = 1;
+		displayClock(hour_hand.angle_index, minute_hand.angle_index, 0);
 }
 
 void itoa(int val, char* val_str) {
@@ -131,7 +106,7 @@ void displayNumTime(int hour_index, int minute_index, int msg_flag) {
 	char hour_str[3], minute_str[3];
 	itoa(hour, hour_str);
 	itoa(minute, minute_str);
-	char messages[3][25] = {"Current Time - ", "Set Cur Time - ", "Set Alarm - "};
+	char messages[5][25] = {"Current Time - ", "Set Hr Hand  ", "Set Min Hand  ", "Set Alarm Hr  ", "Set Alarm Min  "};
 	char* current_time = messages[msg_flag];
 	strcat(current_time, hour_str); 
 	strcat(current_time, ":");
@@ -180,6 +155,51 @@ void Timer2A_Handler(void) {
 	}
 }
 
+int* getModeHand(ClockHand* hand, int mode) {
+	switch(mode) {
+		case 1: return &hand->set_alarm_angle_index;	// Alarm hands
+		case 2: return &hand->set_time_angle_index;		// Current Time hands
+		default: return 0;
+	}
+}
+
+void decHand(ClockHand* hand, int amount, int mode) {
+		int* hand_angle_index = getModeHand(hand, mode);
+		*hand_angle_index = ((*hand_angle_index) - amount) % 720;
+		if (*hand_angle_index < 0) 
+			*hand_angle_index += 720;		
+}
+
+void incHand(ClockHand* hand, int amount, int mode) {
+	int* hand_angle_index = getModeHand(hand, mode);
+	*hand_angle_index = ((*hand_angle_index) + amount) % 720;
+}	
+
+void decrementHandler(int mode) {
+	if(clockMode != 0) {		// Setting time
+		if(!setTimeState) {
+			decHand(&hour_hand, 60, mode);
+		}
+		else {
+			decHand(&minute_hand, 12, mode);
+			decHand(&hour_hand, 1, mode);
+		}
+	}
+}
+
+
+void incrementHandler(int mode) {
+	if(clockMode != 0) {
+		if(!setTimeState) {
+			incHand(&hour_hand, 60, mode);
+		}
+		else {
+			incHand(&minute_hand, 12, mode);
+			incHand(&hour_hand, 1, mode);
+		}
+	}
+}
+
 void storePrevButtonVal() {
 	prevPF0 = PF0;
 	prevPF4 = PF4;
@@ -187,50 +207,10 @@ void storePrevButtonVal() {
 	prevPB1 = PB1;
 	prevPB4 = PB4;
 }
-int setTimeState = -1;
-
-void decHand(ClockHand* hand) {
-				minute_hand.set_time_angle_index = (minute_hand.set_time_angle_index - 12) % 720;
-				if (minute_hand.set_time_angle_index < 0) 
-					minute_hand.set_time_angle_index += 720;
-				
-}
-
-void decrementHandler() {
-	if(clockMode != 0) {		// Setting time
-		if(!setTimeState) {
-			hour_hand.set_time_angle_index = (hour_hand.set_time_angle_index - 60) % 720;
-			if (hour_hand.set_time_angle_index < 0) 
-				hour_hand.set_time_angle_index += 720;
-		}
-		else {
-			minute_hand.set_time_angle_index = (minute_hand.set_time_angle_index - 12) % 720;
-			if (minute_hand.set_time_angle_index < 0) 
-				minute_hand.set_time_angle_index += 720;
-				
-			hour_hand.set_time_angle_index = (hour_hand.set_time_angle_index - 60) % 720;
-			if (hour_hand.set_time_angle_index < 0) 
-				hour_hand.set_time_angle_index += 720;
-		}
-	}
-}
-
-
-void incrementHandler() {
-	if(clockMode != 0) {
-		if(!setTimeState) {
-			hour_hand.set_time_angle_index = (hour_hand.set_time_angle_index + 60) % 720;
-		}
-		else {
-			minute_hand.set_time_angle_index = (minute_hand.set_time_angle_index + 12) % 720; 
-			hour_hand.set_time_angle_index = (hour_hand.set_time_angle_index + 1) % 720;
-		}
-	}
-}
-
 
 void Timer0A_Handler(void) {
   TIMER0_ICR_R = TIMER_ICR_TATOCINT;// acknowledge timer0A timeout
+	modeSwitch = 1;
 	if ((PF4 & 0x10) == 0 && (prevPF4 & 0x10) != 0) {	 
 		// Set Current Time
 		clockMode = 2;
@@ -241,45 +221,49 @@ void Timer0A_Handler(void) {
 			setTimeState = -1;
 		} 
 	}
-	else if ((PF0 & 0x10) == 0 && (prevPF0 & 0x10) != 0) {
+	else if ((PF0 & 0x01) == 0 && (prevPF0 & 0x01) != 0) {
 		// Set Alarm Time or Stop Alarm
 		clockMode = 1;
 		if (++setTimeState == 2) {
 			clockMode = 0;
-			a = minute_hand.set_alarm_angle_index;
-			b = hour_hand.set_alarm_angle_index;
 			setTimeState = -1;
 		}
 	}
-	else if ((PB0 & 0x01) == 0) {  // && (prevPB0 & 0x01) != 0) {
+	else if ((PB0 & 0x01) == 0) {  
 		// Increment hand
-		incrementHandler();
+		incrementHandler(clockMode);
 	}
-	else if ((PB1 & 0x02) == 0 && (prevPB1 & 0x02) != 0) {
+	else if ((PB1 & 0x02) == 0) {
 		// Decrement hand
-		decrementHandler();
+		decrementHandler(clockMode);
 	}
 	else if ((PB4 & 0x10) == 0 && (prevPB4 & 0x10) != 0) {
 		// Back to Ambient
 		clockMode = 0;
 		setTimeState = -1;
 	}
+	else {
+		modeSwitch = 0;	// No change in clockMode
+	}
 	storePrevButtonVal();
 }
 
 
-int main(void){
+void initAll() {
   PLL_Init(Bus80MHz); 
-  PortF_Init();
-	PortB_Init();
+  GPIO_Init();
   ST7735_InitR(INITR_REDTAB);
 	initHands();
-	Timer2_ClockTick_Init(80000); // 80000000;
-	Timer0_ButtonCheck_Init(8000000); // 50ms
+	Timer2_ClockTick_Init(8000000); // 80000000;
+	Timer0_ButtonCheck_Init(6000000); // 50ms
 	ST7735_FillScreen(ST7735_WHITE);
+}
+
+int main(void){
+	initAll();
   while(1){
     PF2 ^= 0x04;
-		if (!isDisplayed) {
+		if (!isDisplayed || modeSwitch) {
 			(*modeRender[clockMode])();
 		}
   } 
