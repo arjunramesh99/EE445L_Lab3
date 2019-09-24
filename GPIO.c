@@ -23,12 +23,13 @@ void PortB_Init(void){
   SYSCTL_RCGCGPIO_R |= 0x02;        // 1) activate clock for Port B
   while((SYSCTL_PRGPIO_R&0x02)==0){}; // allow time for clock to start
                                     // 2) no need to unlock PF2, PF4
-  GPIO_PORTB_PCTL_R &= ~0x000F00FF; // 3) regular GPIO
-  GPIO_PORTB_AMSEL_R &= ~0x13;      // 4) disable analog function on PF2, PF4
+  GPIO_PORTB_PCTL_R &= ~0x0F0F00FF; // 3) regular GPIO
+  GPIO_PORTB_AMSEL_R &= ~0x53;      // 4) disable analog function on PF2, PF4
   GPIO_PORTB_PUR_R |= 0x13;         // 5) pullup for PF4
   GPIO_PORTB_DIR_R &= ~(0x13);         // 5) set direction to output
-  GPIO_PORTB_AFSEL_R &= ~0x13;      // 6) regular port function
-  GPIO_PORTB_DEN_R |= 0x13;         // 7) enable digital port
+	GPIO_PORTB_DIR_R |= 0x040;
+  GPIO_PORTB_AFSEL_R &= ~0x53;      // 6) regular port function
+  GPIO_PORTB_DEN_R |= 0x53;         // 7) enable digital port
 }
 
 
